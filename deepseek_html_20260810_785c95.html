@@ -1,0 +1,1868 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyGUI OS — Веб-эмуляция</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #000; overflow: hidden; height: 100vh; }
+        #boot-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; color: #0f0; font-family: 'Consolas', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; padding: 40px; transition: opacity 0.5s; }
+        #boot-screen.hidden { opacity: 0; pointer-events: none; }
+        #boot-text { width: 80%; max-width: 800px; font-size: 16px; line-height: 1.7; white-space: pre-wrap; margin-bottom: 20px; text-shadow: 0 0 5px #0f0; }
+        #boot-progress { width: 80%; max-width: 800px; height: 20px; background: #222; border: 1px solid #0f0; position: relative; }
+        #boot-progress-bar { height: 100%; width: 0%; background: #0f0; transition: width 0.1s; }
+        #boot-progress-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #000; font-size: 12px; font-weight: bold; }
+        .cursor-blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        #desktop { flex: 1; position: relative; background: #008080; overflow: hidden; height: calc(100vh - 44px); }
+        .icon { position: absolute; width: 70px; height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: white; text-align: center; font-size: 11px; background: rgba(0,0,0,0.1); border-radius: 4px; padding: 4px; transition: background 0.2s; }
+        .icon:hover { background: rgba(255,255,255,0.2); }
+        .icon .ico { font-size: 32px; line-height: 1; }
+        .icon .label { margin-top: 4px; word-wrap: break-word; max-width: 64px; text-shadow: 0 1px 2px black; }
+        #taskbar { height: 44px; background: #c0c0c0; border-top: 2px solid #dfdfdf; display: flex; align-items: center; padding: 0 8px; flex-shrink: 0; position: relative; z-index: 500; }
+        #startBtn { background: #c0c0c0; border: 2px solid #dfdfdf; border-right-color: #808080; border-bottom-color: #808080; padding: 4px 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; height: 32px; font-size: 14px; }
+        #startBtn:hover { background: #d0d0d0; }
+        #taskbarApps { flex: 1; display: flex; align-items: center; gap: 4px; padding: 0 10px; overflow-x: auto; }
+        .taskbarBtn { background: #c0c0c0; border: 2px solid #dfdfdf; border-right-color: #808080; border-bottom-color: #808080; padding: 2px 12px; cursor: pointer; font-size: 12px; white-space: nowrap; height: 28px; display: flex; align-items: center; gap: 4px; }
+        .taskbarBtn.active { border-color: #808080; border-right-color: #dfdfdf; border-bottom-color: #dfdfdf; background: #a0a0a0; }
+        #clock { margin-left: auto; padding: 0 12px; background: #e0e0e0; border: 1px solid #808080; height: 28px; display: flex; align-items: center; font-size: 13px; }
+        #start-menu { position: fixed; bottom: 44px; left: 0; width: 320px; background: #c0c0c0; border: 2px solid #dfdfdf; border-right-color: #808080; border-bottom-color: #808080; display: none; flex-direction: column; padding: 6px 0; z-index: 600; box-shadow: 4px 4px 10px rgba(0,0,0,0.5); max-height: 70vh; overflow-y: auto; }
+        #start-menu.visible { display: flex; }
+        #start-menu .item { padding: 6px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        #start-menu .item:hover { background: #000080; color: white; }
+        #start-menu .separator { height: 2px; background: #808080; margin: 4px 8px; }
+        .window { position: absolute; background: #ececec; border: 2px solid #000080; min-width: 200px; min-height: 150px; display: none; flex-direction: column; box-shadow: 4px 4px 10px rgba(0,0,0,0.5); z-index: 100; border-radius: 3px; }
+        .window.active { z-index: 200; }
+        .window.visible { display: flex; }
+        .titlebar { background: #000080; color: white; padding: 4px 8px; display: flex; align-items: center; justify-content: space-between; cursor: default; flex-shrink: 0; height: 28px; border-radius: 3px 3px 0 0; }
+        .titlebar .title { font-weight: bold; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+        .titlebar .controls { display: flex; gap: 4px; }
+        .titlebar .controls button { background: #c0c0c0; border: 1px solid #dfdfdf; border-right-color: #808080; border-bottom-color: #808080; width: 20px; height: 20px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .titlebar .controls button:hover { background: #d0d0d0; }
+        .titlebar .controls .close { background: #cc0000; color: white; border-color: #cc0000; }
+        .window-content { flex: 1; padding: 6px; overflow: auto; background: #ececec; }
+        .window-content .menu-bar { display: flex; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+        .window-content .menu-bar button { background: #e0e0e0; border: 1px solid #c0c0c0; padding: 2px 10px; cursor: pointer; font-size: 12px; }
+        .window-content .menu-bar button:hover { background: #d0d0d0; }
+        #lock-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a2e; display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 9999; color: white; }
+        #lock-screen.visible { display: flex; }
+        #lock-screen input { padding: 8px 16px; font-size: 18px; text-align: center; background: #2d2d44; color: white; border: 2px solid #4a4a6a; border-radius: 4px; outline: none; width: 250px; margin: 10px; }
+        #lock-screen button { padding: 8px 24px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        #lock-screen .unlock { background: #4CAF50; color: white; }
+        #lock-screen .shutdown { background: #d32f2f; color: white; }
+        #lock-screen .status { font-size: 14px; margin: 10px; }
+        #bsod { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0000AA; color: white; font-family: 'Consolas', monospace; display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 10000; padding: 40px; text-align: center; }
+        #bsod.visible { display: flex; }
+        #bsod pre { white-space: pre-wrap; font-size: 18px; line-height: 1.6; }
+        #context-menu { position: fixed; background: white; border: 1px solid #808080; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); z-index: 10001; display: none; padding: 4px 0; min-width: 150px; }
+        #context-menu .item { padding: 4px 16px; cursor: pointer; }
+        #context-menu .item:hover { background: #000080; color: white; }
+        .notepad-text { width: 100%; height: 100%; resize: none; border: none; font-family: Consolas, monospace; font-size: 13px; }
+        .terminal { background: black; color: #00ff00; font-family: Consolas, monospace; font-size: 13px; padding: 4px; height: 100%; overflow-y: auto; white-space: pre-wrap; }
+        .terminal .input-line { display: flex; align-items: center; }
+        .terminal .input-line span { color: #00ff00; }
+        .terminal .input-line input { background: black; border: none; color: #00ff00; font: inherit; flex: 1; outline: none; }
+        .paint-canvas { border: 1px solid #808080; background: white; cursor: crosshair; width: 100%; height: 100%; }
+        .minesweeper-grid { display: grid; gap: 2px; margin: 4px auto; }
+        .minesweeper-grid button { width: 30px; height: 30px; font-size: 14px; background: #c0c0c0; border: 2px solid #dfdfdf; border-right-color: #808080; border-bottom-color: #808080; cursor: pointer; }
+        .minesweeper-grid button.revealed { background: #e0e0e0; border: 1px solid #808080; }
+        .rus-ide { display: flex; flex-direction: column; height: 100%; }
+        .rus-ide .editor { flex: 1; font-family: Consolas, monospace; font-size: 13px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #808080; resize: none; }
+        .rus-ide .output { height: 120px; background: black; color: white; font-family: Consolas, monospace; font-size: 12px; border: 1px solid #808080; overflow-y: auto; padding: 4px; }
+    </style>
+</head>
+<body>
+
+    <!-- ЭКРАН ЗАГРУЗКИ (BIOS) -->
+    <div id="boot-screen">
+        <div id="boot-text"></div>
+        <div id="boot-progress">
+            <div id="boot-progress-bar"></div>
+            <div id="boot-progress-text">0%</div>
+        </div>
+        <div style="margin-top:10px; font-size:14px; color:#0f0;">
+            <span id="boot-status">Инициализация...</span>
+            <span class="cursor-blink">_</span>
+        </div>
+    </div>
+
+    <!-- РАБОЧИЙ СТОЛ -->
+    <div id="desktop"></div>
+
+    <!-- ПАНЕЛЬ ЗАДАЧ -->
+    <div id="taskbar">
+        <button id="startBtn">🪟 Пуск</button>
+        <div id="taskbarApps"></div>
+        <div id="clock"></div>
+    </div>
+
+    <!-- МЕНЮ ПУСК -->
+    <div id="start-menu">
+        <div class="item" data-app="notepad">📝 Блокнот</div>
+        <div class="item" data-app="explorer">📁 Проводник</div>
+        <div class="item" data-app="terminal">⌨ Терминал</div>
+        <div class="item" data-app="paint">🎨 Paint</div>
+        <div class="item" data-app="minesweeper">💣 Сапёр</div>
+        <div class="item" data-app="ruside">📜 Русский код</div>
+        <div class="item" data-app="console">⌨️ Консоль</div>
+        <div class="item" data-app="lock">🔒 Винлокер</div>
+        <div class="item" data-app="virus">💀 Вирус</div>
+        <div class="separator"></div>
+        <div class="item" id="shutdown-item">⏻ Выключить</div>
+    </div>
+
+    <!-- ВИНЛОКЕР -->
+    <div id="lock-screen">
+        <div style="font-size:48px; margin-bottom:10px;">🔒</div>
+        <div style="font-size:28px; font-weight:bold; margin-bottom:10px;">ЭКРАН ЗАБЛОКИРОВАН</div>
+        <div id="lock-info" style="font-size:14px; color:#a8a8a8; margin-bottom:10px; text-align:center;"></div>
+        <div id="lock-status" style="font-size:14px; margin-bottom:10px;">Введите пароль</div>
+        <input type="password" id="lock-password" placeholder="Пароль" autofocus>
+        <div>
+            <button class="unlock" id="lock-unlock">🔓 Разблокировать</button>
+            <button class="shutdown" id="lock-shutdown">⏻ Выключить</button>
+        </div>
+        <div style="margin-top:15px; font-size:11px; color:#666;">Подсказка: пароль — 1234</div>
+    </div>
+
+    <!-- BSOD -->
+    <div id="bsod">
+        <pre id="bsod-text">Системный сбой</pre>
+        <button onclick="location.reload()" style="margin-top:20px; padding:10px 30px; background:#fff; color:#000; border:none; cursor:pointer; font-size:18px;">Перезагрузить</button>
+    </div>
+
+    <!-- КОНТЕКСТНОЕ МЕНЮ -->
+    <div id="context-menu">
+        <div class="item" id="ctx-create-file">📄 Создать документ</div>
+        <div class="item" id="ctx-create-folder">📁 Создать папку</div>
+        <div class="item" id="ctx-refresh">⟳ Обновить</div>
+    </div>
+
+    <script>
+        // ================================================================
+        //  ЯДРО: ВИРТУАЛЬНАЯ ФАЙЛОВАЯ СИСТЕМА (VFS) С СИСТЕМНЫМИ СКРИПТАМИ
+        // ================================================================
+        class FSNode {
+            constructor(name, type, parent = null) {
+                this.name = name;
+                this.type = type;
+                this.parent = parent;
+                this.isSystem = false;
+                this.content = '';
+                this.children = {};
+                this.modified = Date.now();
+            }
+        }
+
+        class VFS {
+            constructor() {
+                this.root = new FSNode('/', 'dir');
+                this.root.isSystem = true;
+                this._logging = false;
+                this._init();
+            }
+
+            _init() {
+                const dirs = ['sys', 'bin', 'users', 'apps', 'System32', 'Drivers', 'Logs', 'scripts'];
+                for (const d of dirs) {
+                    const node = new FSNode(d, 'dir', this.root);
+                    node.isSystem = (d === 'sys' || d === 'System32' || d === 'Drivers' || d === 'scripts');
+                    this.root.children[d] = node;
+                }
+                const users = this.root.children['users'];
+                const admin = new FSNode('admin', 'dir', users);
+                users.children['admin'] = admin;
+                const desk = new FSNode('Desktop', 'dir', admin);
+                admin.children['Desktop'] = desk;
+                const docs = new FSNode('Documents', 'dir', admin);
+                admin.children['Documents'] = docs;
+                const down = new FSNode('Downloads', 'dir', admin);
+                admin.children['Downloads'] = down;
+
+                // ===== СИСТЕМНЫЕ ФАЙЛЫ =====
+                const sys = this.root.children['sys'];
+                this._addFile(sys, 'kernel.bin',
+                    '=== MyGUI OS KERNEL v3.0 ===\nCRC32: 0xDEADBEEF\nBuild: 2026.07.29', true);
+                this._addFile(sys, 'config.ini',
+                    'OS=MyGUI OS\nVER=3.0.0-Ultimate\nBOOT_MODE=NORMAL\nAUTO_LOGIN=true', true);
+                this._addFile(sys, 'boot.ini',
+                    '[boot loader]\ntimeout=5\ndefault=multi(0)disk(0)rdisk(0)partition(1)\\WINDOWS', true);
+                this._addFile(sys, 'system.reg',
+                    'HKEY_LOCAL_MACHINE\\SOFTWARE\\MyGUI\\Version=3.0\nHKEY_LOCAL_MACHINE\\SOFTWARE\\MyGUI\\Build=2026\nHKEY_LOCAL_MACHINE\\SOFTWARE\\MyGUI\\Language=ru',
+                    true);
+
+                const sys32 = this.root.children['System32'];
+                this._addFile(sys32, 'ntoskrnl.exe', 'NT Kernel 10.0.19041', true);
+                this._addFile(sys32, 'hal.dll', 'Hardware Abstraction Layer', true);
+                this._addFile(sys32, 'services.exe', 'Service Manager v3.0', true);
+                this._addFile(sys32, 'winlogon.exe', 'Windows Logon Application', true);
+                this._addFile(sys32, 'csrss.exe', 'Client Server Runtime', true);
+                this._addFile(sys32, 'lsass.exe', 'Local Security Authority', true);
+                this._addFile(sys32, 'smss.exe', 'Session Manager', true);
+                this._addFile(sys32, 'drivers.sys', 'Driver Database', true);
+
+                // ===== СИСТЕМНЫЕ СКРИПТЫ НА РУССКОМ (RUS) =====
+                const scripts = this.root.children['scripts'];
+                this._addFile(scripts, 'системная_проверка.rus',
+                    `// ============================================
+                    // СИСТЕМНАЯ ПРОВЕРКА
+                    // Проверяет наличие критических файлов
+                    // ============================================
+                    вывод("🔍 ЗАПУСК СИСТЕМНОЙ ПРОВЕРКИ...")
+                    массив критические = ["/sys/kernel.bin", "/sys/config.ini", "/sys/boot.ini", "/System32/ntoskrnl.exe"]
+                    число найдено = 0
+                    число отсутствует = 0
+                    число i = 0
+                    пока (i < длина(критические)) {
+                        строка путь = критические[i]
+                        строка содержимое = прочитать_файл(путь)
+                        если (содержимое != "") {
+                            вывод("✅ Найден: " + путь)
+                            найдено = найдено + 1
+                        } иначе {
+                            вывод("❌ Отсутствует: " + путь)
+                            отсутствует = отсутствует + 1
+                        }
+                        i = i + 1
+                    }
+                    вывод("")
+                    вывод("Итог: найдено " + найдено + ", отсутствует " + отсутствует)
+                    если (отсутствует > 0) {
+                        вывод("⚠️ СИСТЕМА ПОВРЕЖДЕНА! Требуется восстановление.")
+                    } иначе {
+                        вывод("✅ СИСТЕМА ЦЕЛА.")
+                    }
+                `, true);
+
+                this._addFile(scripts, 'генератор_отчёта.rus',
+                    `// ============================================
+                    // ГЕНЕРАТОР ОТЧЁТА О СИСТЕМЕ
+                    // ============================================
+                    вывод("📊 ГЕНЕРАЦИЯ ОТЧЁТА О СИСТЕМЕ...")
+                    строка отчёт = "=== ОТЧЁТ О СИСТЕМЕ ===\\n"
+                    отчёт = отчёт + "Дата: " + дата_время() + "\\n"
+                    отчёт = отчёт + "ОС: MyGUI OS v3.0\\n"
+                    отчёт = отчёт + "Пользователь: Администратор\\n"
+                    отчёт = отчёт + "\\n--- Системные файлы ---\\n"
+                    массив файлы = ["/sys/kernel.bin", "/sys/config.ini", "/sys/boot.ini", "/System32/ntoskrnl.exe"]
+                    число i = 0
+                    пока (i < длина(файлы)) {
+                        строка путь = файлы[i]
+                        строка содержимое = прочитать_файл(путь)
+                        если (содержимое != "") {
+                            отчёт = отчёт + "✅ " + путь + " - существует\\n"
+                        } иначе {
+                            отчёт = отчёт + "❌ " + путь + " - ОТСУТСТВУЕТ\\n"
+                        }
+                        i = i + 1
+                    }
+                    отчёт = отчёт + "\\n--- Процессы ---\\n"
+                    отчёт = отчёт + "Система: работает\\n"
+                    отчёт = отчёт + "Память: 4096 MB\\n"
+                    отчёт = отчёт + "Загрузка ЦП: " + случайное(5, 30) + "%\\n"
+                    записать_файл("/users/admin/Desktop/отчёт.txt", отчёт)
+                    вывод("✅ Отчёт сохранён на рабочем столе (отчёт.txt)")
+                `, true);
+
+                this._addFile(scripts, 'автозагрузка.rus',
+                    `// ============================================
+                    // АВТОЗАГРУЗКА
+                    // ============================================
+                    вывод("🔄 ЗАПУСК АВТОЗАГРУЗКИ...")
+                    вывод("Система загружена. Добро пожаловать!")
+                    строка привет = прочитать_файл("/users/admin/Desktop/readme.txt")
+                    если (привет != "") {
+                        вывод("📄 Найден файл readme.txt:")
+                        вывод(привет)
+                    }
+                    вывод("✅ Автозагрузка завершена.")
+                `, true);
+
+                this._addFile(scripts, 'калькулятор_на_рублях.rus',
+                    `// ============================================
+                    // КАЛЬКУЛЯТОР НА РУССКОМ
+                    // ============================================
+                    вывод("🧮 КАЛЬКУЛЯТОР НА РУССКОМ")
+                    вывод("Введите выражение (например: 2 + 3 * 4)")
+                    строка выражение = ввод("Выражение: ")
+                    число результат = eval(выражение)
+                    вывод("Результат: " + результат)
+                `, true);
+
+                // ===== ФАЙЛЫ НА РАБОЧЕМ СТОЛЕ =====
+                this._addFile(desk, 'readme.txt',
+                    'Добро пожаловать в MyGUI OS!\nВерсия 3.0.0-Ultimate\n\nЗдесь можно запускать вирус и винлокер.\nСистемные файлы защищены.\n\n📁 Папка /scripts содержит системные скрипты на русском языке.');
+                this._addFile(desk, 'пример.rus',
+                    `// ============================================
+                    // ПРИМЕР ПРОГРАММЫ НА РУССКОМ ЯЗЫКЕ
+                    // ============================================
+
+                    // Объявляем функцию
+                    функция привет(имя) {
+                        вывод("Привет, " + имя + "!")
+                    }
+
+                    // Вызываем функцию
+                    привет("Администратор")
+
+                    // Переменные с типами
+                    число a = 5
+                    число b = 10
+                    строка текст = "Сумма чисел"
+                    логика больше = a > b
+
+                    вывод(текст + ": " + (a + b))
+                    если (a > b) {
+                        вывод("a больше b")
+                    } иначе {
+                        вывод("a меньше или равно b")
+                    }
+
+                    // Массивы и циклы
+                    массив числа = [10, 20, 30, 40, 50]
+                    число сумма = 0
+                    число i = 0
+                    пока (i < длина(числа)) {
+                        сумма = сумма + числа[i]
+                        вывод("Элемент " + i + ": " + числа[i])
+                        i = i + 1
+                    }
+                    вывод("Сумма массива: " + сумма)
+
+                    // Цикл для
+                    для (число j = 1; j <= 5; j = j + 1) {
+                        вывод("j = " + j)
+                    }
+
+                    // Работа с файлами
+                    строка содержимое = прочитать_файл("/sys/config.ini")
+                    вывод("Содержимое config.ini:")
+                    вывод(содержимое)
+
+                    // Запись в файл
+                    строка новый_файл = "/users/admin/Desktop/тест.txt"
+                    записать_файл(новый_файл, "Это тестовый файл созданный из программы на русском языке.")
+                    вывод("Файл создан: " + новый_файл)
+                `);
+
+                // ===== ЛОГ =====
+                const logs = this.root.children['Logs'];
+                this._addFile(logs, 'system.log', '=== SYSTEM LOG ===\n');
+                this.appendLog('Система инициализирована.');
+            }
+
+            _addFile(parent, name, content, system = false) {
+                const f = new FSNode(name, 'file', parent);
+                f.content = content;
+                f.isSystem = system;
+                parent.children[name] = f;
+            }
+
+            resolve(path) {
+                if (path === '/' || path === '') return this.root;
+                const parts = path.split('/').filter(p => p);
+                let cur = this.root;
+                for (const p of parts) {
+                    if (!cur.children[p]) return null;
+                    cur = cur.children[p];
+                }
+                return cur;
+            }
+
+            readFile(path) {
+                const node = this.resolve(path);
+                if (node && node.type === 'file') return node.content;
+                return null;
+            }
+
+            writeFile(path, content) {
+                const parts = path.split('/');
+                const name = parts.pop();
+                const dirPath = parts.join('/') || '/';
+                const dir = this.resolve(dirPath);
+                if (!dir || dir.type !== 'dir') return false;
+                if (dir.children[name]) {
+                    if (dir.children[name].type === 'file') {
+                        dir.children[name].content = content;
+                        dir.children[name].modified = Date.now();
+                        if (!this._logging) this.appendLog(`Файл ${path} изменён.`);
+                        return true;
+                    }
+                    return false;
+                } else {
+                    const f = new FSNode(name, 'file', dir);
+                    f.content = content;
+                    dir.children[name] = f;
+                    if (!this._logging) this.appendLog(`Файл ${path} создан.`);
+                    return true;
+                }
+            }
+
+            deleteFile(path) {
+                const node = this.resolve(path);
+                if (!node || node.isSystem) return false;
+                const parent = node.parent;
+                if (parent && parent.type === 'dir') {
+                    delete parent.children[node.name];
+                    if (!this._logging) this.appendLog(`Удалён ${path}`);
+                    return true;
+                }
+                return false;
+            }
+
+            listDir(path) {
+                const node = this.resolve(path);
+                if (node && node.type === 'dir') return Object.keys(node.children);
+                return [];
+            }
+
+            mkdir(path) {
+                const parts = path.split('/');
+                const name = parts.pop();
+                const dirPath = parts.join('/') || '/';
+                const dir = this.resolve(dirPath);
+                if (!dir || dir.type !== 'dir') return false;
+                if (dir.children[name]) return false;
+                const d = new FSNode(name, 'dir', dir);
+                dir.children[name] = d;
+                this.appendLog(`Директория ${path} создана.`);
+                return true;
+            }
+
+            isSystemFile(path) {
+                const node = this.resolve(path);
+                if (node) return node.isSystem;
+                return false;
+            }
+
+            appendLog(msg) {
+                if (this._logging) return;
+                this._logging = true;
+                const logPath = '/Logs/system.log';
+                let content = this.readFile(logPath) || '=== SYSTEM LOG ===\n';
+                const ts = new Date().toLocaleString();
+                content += `[${ts}] ${msg}\n`;
+                this.writeFile(logPath, content);
+                this._logging = false;
+            }
+
+            checkIntegrity() {
+                const critical = ['/sys/kernel.bin', '/sys/config.ini', '/sys/boot.ini',
+                    '/System32/ntoskrnl.exe', '/System32/services.exe'
+                ];
+                const missing = [];
+                for (const p of critical) {
+                    if (!this.resolve(p)) missing.push(p);
+                }
+                return missing;
+            }
+        }
+
+        // ================================================================
+        //  УЛУЧШЕННЫЙ ИНТЕРПРЕТАТОР РУССКОГО ЯЗЫКА
+        // ================================================================
+        class RussianInterpreter {
+            constructor(vfs) {
+                this.vfs = vfs;
+                this.vars = {};
+                this.funcs = {};
+                this.output = '';
+                this.loopGuard = 0;
+                this.eval = (expr) => {
+                    try { return Function('"use strict"; return (' + expr + ')')(); } catch (e) { return expr; }
+                };
+            }
+
+            run(code, outputCallback) {
+                this.vars = {};
+                this.funcs = {};
+                this.output = '';
+                this.loopGuard = 0;
+                const lines = code.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//') && !l.startsWith('#'));
+                let i = 0;
+                while (i < lines.length) {
+                    if (lines[i].startsWith('функция')) {
+                        const parts = lines[i].slice(8).trim();
+                        const match = parts.match(/(\w+)\s*\(([^)]*)\)\s*\{/);
+                        if (match) {
+                            const name = match[1];
+                            const params = match[2].split(',').map(p => p.trim()).filter(p => p);
+                            const body = [];
+                            i++;
+                            let brace = 0;
+                            while (i < lines.length) {
+                                if (lines[i] === '{') brace++;
+                                else if (lines[i] === '}') {
+                                    if (brace === 0) break;
+                                    brace--;
+                                } else body.push(lines[i]);
+                                i++;
+                            }
+                            this.funcs[name] = { params, body };
+                        } else i++;
+                    } else i++;
+                }
+                i = 0;
+                while (i < lines.length) {
+                    const line = lines[i];
+                    if (line.startsWith('функция')) {
+                        i++;
+                        while (i < lines.length && lines[i] !== '}') i++;
+                        i++;
+                        continue;
+                    }
+                    if (line.startsWith('использовать')) {
+                        const path = line.slice(11).trim().replace(/["']/g, '');
+                        const fullPath = path.startsWith('/') ? path : '/users/admin/Desktop/' + path;
+                        const content = this.vfs.readFile(fullPath);
+                        if (content) {
+                            const sub = new RussianInterpreter(this.vfs);
+                            sub.run(content, (t) => this.output += t + '\n');
+                        } else {
+                            this.output += `Ошибка импорта: ${path}\n`;
+                        }
+                        i++;
+                        continue;
+                    }
+                    if (line.startsWith('если')) {
+                        const cond = line.slice(4).trim();
+                        let body = [];
+                        let elseBody = [];
+                        i++;
+                        let brace = 0;
+                        while (i < lines.length) {
+                            if (lines[i] === '{') brace++;
+                            else if (lines[i] === '}') { if (brace === 0) break;
+                                brace--; }
+                            body.push(lines[i]);
+                            i++;
+                        }
+                        i++;
+                        if (i < lines.length && lines[i].startsWith('иначе')) {
+                            i++;
+                            brace = 0;
+                            while (i < lines.length) {
+                                if (lines[i] === '{') brace++;
+                                else if (lines[i] === '}') { if (brace === 0) break;
+                                    brace--; }
+                                elseBody.push(lines[i]);
+                                i++;
+                            }
+                            i++;
+                        }
+                        const condResult = this.evalCondition(cond);
+                        if (condResult) {
+                            this.executeBlock(body);
+                        } else {
+                            this.executeBlock(elseBody);
+                        }
+                        continue;
+                    }
+                    if (line.startsWith('пока')) {
+                        const cond = line.slice(4).trim();
+                        let body = [];
+                        i++;
+                        let brace = 0;
+                        while (i < lines.length) {
+                            if (lines[i] === '{') brace++;
+                            else if (lines[i] === '}') { if (brace === 0) break;
+                                brace--; }
+                            body.push(lines[i]);
+                            i++;
+                        }
+                        i++;
+                        this.loopGuard = 0;
+                        while (this.evalCondition(cond) && this.loopGuard < 10000) {
+                            this.loopGuard++;
+                            this.executeBlock(body);
+                        }
+                        if (this.loopGuard >= 10000) {
+                            this.output += '⚠️ Бесконечный цикл прерван!\n';
+                        }
+                        continue;
+                    }
+                    if (line.startsWith('для')) {
+                        const inner = line.slice(4).trim();
+                        const parts = inner.split(';').map(p => p.trim());
+                        if (parts.length === 3) {
+                            const init = parts[0];
+                            const cond = parts[1];
+                            const inc = parts[2];
+                            this.executeLine(init);
+                            let body = [];
+                            i++;
+                            let brace = 0;
+                            while (i < lines.length) {
+                                if (lines[i] === '{') brace++;
+                                else if (lines[i] === '}') { if (brace === 0) break;
+                                    brace--; }
+                                body.push(lines[i]);
+                                i++;
+                            }
+                            i++;
+                            this.loopGuard = 0;
+                            while (this.evalCondition(cond) && this.loopGuard < 10000) {
+                                this.loopGuard++;
+                                this.executeBlock(body);
+                                this.executeLine(inc);
+                            }
+                            if (this.loopGuard >= 10000) {
+                                this.output += '⚠️ Бесконечный цикл прерван!\n';
+                            }
+                            continue;
+                        } else {
+                            this.output += 'Ошибка синтаксиса для: (инициализация; условие; инкремент)\n';
+                            i++;
+                            continue;
+                        }
+                    }
+                    this.executeLine(line);
+                    i++;
+                }
+                if (outputCallback) outputCallback(this.output);
+            }
+
+            executeBlock(lines) {
+                for (const line of lines) {
+                    if (line.trim() === '' || line.trim() === '{' || line.trim() === '}') continue;
+                    this.executeLine(line);
+                }
+            }
+
+            executeLine(line) {
+                line = line.trim();
+                if (line === '') return;
+                // Присваивание с типом
+                if (line.includes('=') && !line.startsWith('если') && !line.startsWith('пока') && !line.startsWith('для') && !line
+                    .startsWith('функция')) {
+                    const [varName, expr] = line.split('=').map(s => s.trim());
+                    if (varName.startsWith('число ') || varName.startsWith('строка ') || varName.startsWith('логика ') ||
+                        varName.startsWith('массив ')) {
+                        const parts = varName.split(' ');
+                        const type = parts[0];
+                        const name = parts[1];
+                        let val = this.evalExpr(expr);
+                        if (type === 'число') val = Number(val);
+                        else if (type === 'строка') val = String(val);
+                        else if (type === 'логика') val = Boolean(val);
+                        else if (type === 'массив') {
+                            if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
+                                val = val.slice(1, -1).split(',').map(s => this.evalExpr(s.trim()));
+                            } else if (!Array.isArray(val)) {
+                                val = [val];
+                            }
+                        }
+                        this.vars[name] = val;
+                    } else {
+                        const name = varName;
+                        const val = this.evalExpr(expr);
+                        this.vars[name] = val;
+                    }
+                    return;
+                }
+                if (line.startsWith('вывод')) {
+                    const expr = line.slice(5).trim();
+                    if (expr.startsWith('(') && expr.endsWith(')')) {
+                        const inner = expr.slice(1, -1);
+                        const val = this.evalExpr(inner);
+                        this.output += String(val) + '\n';
+                    } else {
+                        const val = this.evalExpr(expr);
+                        this.output += String(val) + '\n';
+                    }
+                    return;
+                }
+                if (line.startsWith('вернуть')) {
+                    return;
+                }
+                const match = line.match(/(\w+)\s*\(([^)]*)\)/);
+                if (match) {
+                    const fname = match[1];
+                    const args = match[2].split(',').map(a => a.trim()).filter(a => a);
+                    if (this.funcs[fname]) {
+                        const fn = this.funcs[fname];
+                        const oldVars = {...this.vars };
+                        fn.params.forEach((p, idx) => {
+                            this.vars[p] = this.evalExpr(args[idx] || '');
+                        });
+                        this.executeBlock(fn.body);
+                        this.vars = oldVars;
+                    } else {
+                        this.output += `Ошибка: функция ${fname} не определена\n`;
+                    }
+                    return;
+                }
+                try {
+                    const result = this.evalExpr(line);
+                    if (result !== undefined) this.output += String(result) + '\n';
+                } catch (e) {
+                    this.output += `Ошибка: ${e.message}\n`;
+                }
+            }
+
+            evalExpr(expr) {
+                for (const [k, v] of Object.entries(this.vars)) {
+                    let val = '';
+                    if (typeof v === 'string') val = '"' + v + '"';
+                    else if (Array.isArray(v)) val = '[' + v.map(x => typeof x === 'string' ? '"' + x + '"' : x).join(',') +
+                        ']';
+                    else val = String(v);
+                    expr = expr.replace(new RegExp(k, 'g'), val);
+                }
+                expr = expr.replace(/длина\(/g, 'Math.sqrt(');
+                expr = expr.replace(/случайное\(([^,]+),\s*([^)]+)\)/g, (match, min, max) => {
+                    return `Math.floor(Math.random()*(${max}-${min}+1))+${min}`;
+                });
+                expr = expr.replace(/время\(\)/g, 'Date.now()');
+                expr = expr.replace(/тип\(([^)]+)\)/g, (match, p1) => {
+                    for (const [k, v] of Object.entries(this.vars)) {
+                        if (expr.includes(k)) {
+                            if (typeof v === 'number') return 'число';
+                            if (typeof v === 'string') return 'строка';
+                            if (typeof v === 'boolean') return 'логика';
+                            if (Array.isArray(v)) return 'массив';
+                        }
+                    }
+                    return 'неизвестно';
+                });
+                expr = expr.replace(/прочитать_файл\(([^)]+)\)/g, (match, p1) => {
+                    const path = this.evalExpr(p1.trim());
+                    const content = this.vfs.readFile(path);
+                    return content ? '"' + content + '"' : '""';
+                });
+                expr = expr.replace(/записать_файл\(([^,]+),\s*([^)]+)\)/g, (match, p1, p2) => {
+                    const path = this.evalExpr(p1.trim());
+                    const content = this.evalExpr(p2.trim());
+                    return this.vfs.writeFile(path, content) ? 'истина' : 'ложь';
+                });
+                expr = expr.replace(/удалить_файл\(([^)]+)\)/g, (match, p1) => {
+                    const path = this.evalExpr(p1.trim());
+                    return this.vfs.deleteFile(path) ? 'истина' : 'ложь';
+                });
+                expr = expr.replace(/текущая_дата\(\)/g, `"${new Date().toLocaleDateString()}"`);
+                expr = expr.replace(/текущее_время\(\)/g, `"${new Date().toLocaleTimeString()}"`);
+                expr = expr.replace(/дата_время\(\)/g, `"${new Date().toLocaleString()}"`);
+                expr = expr.replace(/и/g, '&&').replace(/или/g, '||').replace(/не/g, '!');
+                expr = expr.replace(/истина/g, 'true').replace(/ложь/g, 'false').replace(/null/g, 'null');
+                try {
+                    return Function('"use strict"; return (' + expr + ')')();
+                } catch (e) {
+                    return expr;
+                }
+            }
+
+            evalCondition(cond) {
+                try {
+                    const result = this.evalExpr(cond);
+                    return Boolean(result);
+                } catch (e) {
+                    return false;
+                }
+            }
+        }
+
+        // ================================================================
+        //  ОПЕРАЦИОННАЯ СИСТЕМА (OS)
+        // ================================================================
+        const OS = {
+            vfs: new VFS(),
+            windows: {},
+            activeWindow: null,
+            windowCounter: 0,
+            isLocked: false,
+            booted: false,
+
+            boot() {
+                this.showBootScreen();
+                const bootText = document.getElementById('boot-text');
+                const bootBar = document.getElementById('boot-progress-bar');
+                const bootStatus = document.getElementById('boot-status');
+                const bootProgressText = document.getElementById('boot-progress-text');
+
+                const steps = [
+                    { text: 'Award Modular BIOS v6.00PG, An Energy Star Ally\n', delay: 200 },
+                    { text: 'Copyright (C) 1984-2026, Award Software, Inc.\n\n', delay: 300 },
+                    { text: 'Main Processor : Virtual Quantum CPU @ 8.4 GHz\n', delay: 200 },
+                    { text: 'Memory Testing : 4194304K OK\n', delay: 200 },
+                    { text: 'Detecting IDE Primary Master ... [Press F4 to skip]\n', delay: 300 },
+                    { text: 'Detecting IDE Primary Slave  ... None\n', delay: 200 },
+                    { text: 'Detecting SATA1 ... VIRTUAL_HDD_10TB\n', delay: 200 },
+                    { text: 'Detecting SATA2 ... None\n\n', delay: 200 },
+                    { text: 'Booting from Network (PXE)...\n', delay: 300 },
+                    { text: 'DHCP MAC: 00:FF:AA:BB:CC:DD\n', delay: 200 },
+                    { text: 'Connecting to Master Server... OK\n\n', delay: 300 },
+                    { text: '--- MyGUI OS v3.0.0-Ultimate ---\n', delay: 200 },
+                    { text: 'Загрузка ядра... ', delay: 100 },
+                ];
+
+                let idx = 0;
+                let progress = 0;
+                let fullText = '';
+
+                const nextStep = () => {
+                    if (idx >= steps.length) {
+                        bootStatus.textContent = 'Загрузка завершена. Запуск GUI...';
+                        bootProgressText.textContent = '100%';
+                        bootBar.style.width = '100%';
+                        setTimeout(() => {
+                            document.getElementById('boot-screen').classList.add('hidden');
+                            this.booted = true;
+                            this.initDesktop();
+                            this.runAutostart();
+                        }, 500);
+                        return;
+                    }
+                    const step = steps[idx];
+                    if (step.text.includes('...')) {
+                        let dots = 0;
+                        const baseText = step.text.replace('...', '');
+                        const interval = setInterval(() => {
+                            dots = (dots % 3) + 1;
+                            bootStatus.textContent = baseText + '.'.repeat(dots);
+                            progress += 0.5;
+                            bootBar.style.width = Math.min(progress, 100) + '%';
+                            bootProgressText.textContent = Math.round(Math.min(progress, 100)) + '%';
+                            if (dots === 3) {
+                                clearInterval(interval);
+                                fullText += step.text;
+                                bootText.textContent = fullText;
+                                idx++;
+                                progress += 3;
+                                setTimeout(nextStep, 200);
+                            }
+                        }, 300);
+                    } else {
+                        fullText += step.text;
+                        bootText.textContent = fullText;
+                        progress += 5 + Math.random() * 5;
+                        bootBar.style.width = Math.min(progress, 100) + '%';
+                        bootProgressText.textContent = Math.round(Math.min(progress, 100)) + '%';
+                        if (step.text.includes('Memory')) {
+                            let mem = 0;
+                            const memInterval = setInterval(() => {
+                                mem += 1024;
+                                if (mem >= 4194304) {
+                                    clearInterval(memInterval);
+                                    bootStatus.textContent = 'Memory Testing : 4194304K OK';
+                                } else {
+                                    bootStatus.textContent = `Memory Testing : ${mem}K OK`;
+                                }
+                            }, 10);
+                            setTimeout(() => {
+                                clearInterval(memInterval);
+                                idx++;
+                                setTimeout(nextStep, 200);
+                            }, 500);
+                            return;
+                        }
+                        idx++;
+                        setTimeout(nextStep, step.delay);
+                    }
+                };
+                nextStep();
+            },
+
+            showBootScreen() {
+                document.getElementById('boot-screen').classList.remove('hidden');
+            },
+
+            runAutostart() {
+                const content = this.vfs.readFile('/scripts/автозагрузка.rus');
+                if (content) {
+                    const interp = new RussianInterpreter(this.vfs);
+                    interp.run(content, (text) => {
+                        console.log('[AUTOSTART]', text);
+                    });
+                }
+            },
+
+            initDesktop() {
+                this.renderDesktop();
+                this.updateClock();
+                this.setupEvents();
+                const missing = this.vfs.checkIntegrity();
+                if (missing.length > 0) {
+                    this.showBSOD('Системные файлы повреждены!', missing);
+                }
+                this.updateLockInfo();
+            },
+
+            renderDesktop() {
+                const desktop = document.getElementById('desktop');
+                desktop.innerHTML = '';
+                const icons = [
+                    { name: 'Мой Компьютер', icon: '💻', x: 20, y: 20, action: () => this.openApp('explorer') },
+                    { name: 'Терминал', icon: '⌨', x: 20, y: 100, action: () => this.openApp('terminal') },
+                    { name: 'Блокнот', icon: '📝', x: 20, y: 180, action: () => this.openApp('notepad') },
+                    { name: 'Paint', icon: '🎨', x: 20, y: 260, action: () => this.openApp('paint') },
+                    { name: 'Сапёр', icon: '💣', x: 20, y: 340, action: () => this.openApp('minesweeper') },
+                    { name: 'Русский код', icon: '📜', x: 20, y: 420, action: () => this.openApp('ruside') },
+                    { name: 'Консоль', icon: '⌨️', x: 20, y: 500, action: () => this.openApp('console') },
+                    { name: 'Винлокер', icon: '🔒', x: 20, y: 580, action: () => this.lockScreen() },
+                    { name: 'Вирус', icon: '💀', x: 20, y: 660, action: () => this.openApp('virus') },
+                    { name: 'Корзина', icon: '🗑', x: 20, y: 740, action: () => alert('Корзина пуста.') },
+                ];
+                icons.forEach(ic => {
+                    const div = document.createElement('div');
+                    div.className = 'icon';
+                    div.style.left = ic.x + 'px';
+                    div.style.top = ic.y + 'px';
+                    div.innerHTML = `<div class="ico">${ic.icon}</div><div class="label">${ic.name}</div>`;
+                    div.addEventListener('dblclick', ic.action);
+                    desktop.appendChild(div);
+                });
+                const files = this.vfs.listDir('/users/admin/Desktop');
+                let x = 100,
+                    y = 20;
+                files.forEach(f => {
+                    const node = this.vfs.resolve('/users/admin/Desktop/' + f);
+                    if (node) {
+                        const div = document.createElement('div');
+                        div.className = 'icon';
+                        div.style.left = x + 'px';
+                        div.style.top = y + 'px';
+                        const icon = node.type === 'dir' ? '📁' : '📄';
+                        const label = f.length > 12 ? f.slice(0, 10) + '...' : f;
+                        div.innerHTML = `<div class="ico">${icon}</div><div class="label">${label}</div>`;
+                        div.addEventListener('dblclick', () => {
+                            if (f.endsWith('.rus')) {
+                                this.openApp('ruside', '/users/admin/Desktop/' + f);
+                            } else {
+                                this.openApp('notepad', '/users/admin/Desktop/' + f);
+                            }
+                        });
+                        desktop.appendChild(div);
+                        y += 80;
+                        if (y > window.innerHeight - 150) { y = 20;
+                            x += 80; }
+                    }
+                });
+            },
+
+            refreshDesktop() { this.renderDesktop(); },
+
+            openApp(appId, param = null) {
+                switch (appId) {
+                    case 'notepad':
+                        return new Notepad(this, param);
+                    case 'explorer':
+                        return new Explorer(this);
+                    case 'terminal':
+                        return new Terminal(this);
+                    case 'paint':
+                        return new Paint(this);
+                    case 'minesweeper':
+                        return new Minesweeper(this);
+                    case 'ruside':
+                        return new RusIDE(this, param);
+                    case 'console':
+                        return new Console(this);
+                    case 'virus':
+                        return new Virus(this);
+                    default:
+                        alert('Приложение не найдено');
+                }
+            },
+
+            createWindow(title, contentHTML, width = 500, height = 400, icon = '📄') {
+                const id = 'win_' + (++this.windowCounter);
+                const desktop = document.getElementById('desktop');
+                const win = document.createElement('div');
+                win.className = 'window visible active';
+                win.id = id;
+                win.style.width = width + 'px';
+                win.style.height = height + 'px';
+                win.style.left = (50 + Math.random() * 200) + 'px';
+                win.style.top = (50 + Math.random() * 100) + 'px';
+                win.innerHTML = `
+                    <div class="titlebar">
+                        <div class="title">${icon} ${title}</div>
+                        <div class="controls">
+                            <button onclick="OS.closeWindow('${id}')">_</button>
+                            <button onclick="OS.toggleMaximize('${id}')">🗖</button>
+                            <button class="close" onclick="OS.closeWindow('${id}')">✕</button>
+                        </div>
+                    </div>
+                    <div class="window-content">${contentHTML}</div>
+                `;
+                desktop.appendChild(win);
+                this.windows[id] = { win, title, app: null };
+                this.setActiveWindow(id);
+                this.makeDraggable(win);
+                this.updateTaskbar();
+                return id;
+            },
+
+            closeWindow(id) {
+                const w = this.windows[id];
+                if (w) {
+                    w.win.remove();
+                    delete this.windows[id];
+                    this.updateTaskbar();
+                    if (this.activeWindow === id) this.activeWindow = null;
+                }
+            },
+
+            setActiveWindow(id) {
+                if (this.activeWindow) {
+                    const old = document.getElementById(this.activeWindow);
+                    if (old) old.classList.remove('active');
+                }
+                this.activeWindow = id;
+                const cur = document.getElementById(id);
+                if (cur) cur.classList.add('active');
+                this.updateTaskbar();
+            },
+
+            makeDraggable(win) {
+                const title = win.querySelector('.titlebar');
+                let offsetX, offsetY, dragging = false;
+                title.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    dragging = true;
+                    const rect = win.getBoundingClientRect();
+                    offsetX = e.clientX - rect.left;
+                    offsetY = e.clientY - rect.top;
+                    win.style.zIndex = 1000 + ++this.windowCounter;
+                    this.setActiveWindow(win.id);
+                });
+                document.addEventListener('mousemove', (e) => {
+                    if (!dragging) return;
+                    const x = e.clientX - offsetX;
+                    const y = e.clientY - offsetY;
+                    win.style.left = Math.max(0, x) + 'px';
+                    win.style.top = Math.max(0, y) + 'px';
+                });
+                document.addEventListener('mouseup', () => { dragging = false; });
+            },
+
+            toggleMaximize(id) {
+                const win = document.getElementById(id);
+                if (!win) return;
+                if (win.style.width === '100%') {
+                    win.style.width = win.dataset.oldWidth || '500px';
+                    win.style.height = win.dataset.oldHeight || '400px';
+                    win.style.left = win.dataset.oldLeft || '50px';
+                    win.style.top = win.dataset.oldTop || '50px';
+                } else {
+                    win.dataset.oldWidth = win.style.width;
+                    win.dataset.oldHeight = win.style.height;
+                    win.dataset.oldLeft = win.style.left;
+                    win.dataset.oldTop = win.style.top;
+                    win.style.width = '100%';
+                    win.style.height = '100%';
+                    win.style.left = '0';
+                    win.style.top = '0';
+                }
+            },
+
+            updateTaskbar() {
+                const container = document.getElementById('taskbarApps');
+                container.innerHTML = '';
+                for (const [id, w] of Object.entries(this.windows)) {
+                    const btn = document.createElement('button');
+                    btn.className = 'taskbarBtn' + (this.activeWindow === id ? ' active' : '');
+                    btn.textContent = w.title;
+                    btn.onclick = () => {
+                        const win = document.getElementById(id);
+                        if (win) {
+                            if (win.style.display === 'none') {
+                                win.style.display = 'flex';
+                            }
+                            this.setActiveWindow(id);
+                        }
+                    };
+                    container.appendChild(btn);
+                }
+            },
+
+            updateClock() {
+                const now = new Date();
+                document.getElementById('clock').textContent = now.toLocaleTimeString();
+                setTimeout(() => this.updateClock(), 1000);
+            },
+
+            toggleStartMenu() {
+                const menu = document.getElementById('start-menu');
+                menu.classList.toggle('visible');
+            },
+
+            hideStartMenu() {
+                document.getElementById('start-menu').classList.remove('visible');
+            },
+
+            lockScreen() {
+                document.getElementById('lock-screen').classList.add('visible');
+                this.isLocked = true;
+                this.updateLockInfo();
+                document.getElementById('lock-password').value = '';
+                document.getElementById('lock-status').textContent = 'Введите пароль';
+                document.getElementById('lock-password').focus();
+                document.getElementById('desktop').style.pointerEvents = 'none';
+                document.getElementById('taskbar').style.pointerEvents = 'none';
+            },
+
+            unlockScreen() {
+                const pass = document.getElementById('lock-password').value;
+                if (pass === '1234') {
+                    document.getElementById('lock-screen').classList.remove('visible');
+                    this.isLocked = false;
+                    document.getElementById('desktop').style.pointerEvents = 'auto';
+                    document.getElementById('taskbar').style.pointerEvents = 'auto';
+                    this.vfs.appendLog('Разблокировка экрана.');
+                } else {
+                    document.getElementById('lock-status').textContent = '❌ Неверный пароль!';
+                    document.getElementById('lock-password').value = '';
+                    document.getElementById('lock-password').focus();
+                }
+            },
+
+            updateLockInfo() {
+                const now = new Date();
+                document.getElementById('lock-info').innerHTML =
+                    `Система: MyGUI OS v3.0<br>Пользователь: Администратор<br>${now.toLocaleString()}`;
+            },
+
+            showBSOD(message, files) {
+                const bsod = document.getElementById('bsod');
+                document.getElementById('bsod-text').textContent = message + '\n\nОтсутствуют файлы:\n' + files.join('\n');
+                bsod.classList.add('visible');
+            },
+
+            shutdown() {
+                if (confirm('Выключить систему?')) {
+                    this.vfs.appendLog('Выключение системы.');
+                    document.body.innerHTML =
+                        '<div style="background:black; color:white; display:flex; justify-content:center; align-items:center; height:100vh; font-size:36px; flex-direction:column;"><div>Завершение работы...</div><div style="font-size:18px; margin-top:20px;">Нажмите F5 для перезагрузки</div></div>';
+                }
+            },
+
+            setupEvents() {
+                document.getElementById('startBtn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.toggleStartMenu();
+                });
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#start-menu') && !e.target.closest('#startBtn')) {
+                        this.hideStartMenu();
+                    }
+                });
+
+                document.querySelectorAll('#start-menu .item[data-app]').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const app = el.dataset.app;
+                        if (app === 'lock') this.lockScreen();
+                        else this.openApp(app);
+                        this.hideStartMenu();
+                    });
+                });
+
+                document.getElementById('shutdown-item').addEventListener('click', () => {
+                    this.shutdown();
+                    this.hideStartMenu();
+                });
+
+                document.getElementById('lock-unlock').addEventListener('click', () => this.unlockScreen());
+                document.getElementById('lock-password').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') this.unlockScreen();
+                });
+                document.getElementById('lock-shutdown').addEventListener('click', () => this.shutdown());
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.altKey && (e.key === 'l' || e.key === 'L')) {
+                        e.preventDefault();
+                        this.lockScreen();
+                    }
+                });
+
+                document.getElementById('desktop').addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    const menu = document.getElementById('context-menu');
+                    menu.style.display = 'block';
+                    menu.style.left = e.clientX + 'px';
+                    menu.style.top = e.clientY + 'px';
+                });
+                document.addEventListener('click', () => {
+                    document.getElementById('context-menu').style.display = 'none';
+                });
+                document.getElementById('ctx-create-file').addEventListener('click', () => {
+                    this.createTextFile();
+                    document.getElementById('context-menu').style.display = 'none';
+                });
+                document.getElementById('ctx-create-folder').addEventListener('click', () => {
+                    this.createFolder();
+                    document.getElementById('context-menu').style.display = 'none';
+                });
+                document.getElementById('ctx-refresh').addEventListener('click', () => {
+                    this.refreshDesktop();
+                    document.getElementById('context-menu').style.display = 'none';
+                });
+            },
+
+            createTextFile() {
+                const name = 'Новый_документ_' + Math.floor(Math.random() * 100) + '.txt';
+                const path = '/users/admin/Desktop/' + name;
+                this.vfs.writeFile(path, '');
+                this.vfs.appendLog('Создан файл ' + name);
+                this.refreshDesktop();
+            },
+
+            createFolder() {
+                const name = 'Новая_папка_' + Math.floor(Math.random() * 100);
+                const path = '/users/admin/Desktop/' + name;
+                this.vfs.mkdir(path);
+                this.vfs.appendLog('Создана папка ' + name);
+                this.refreshDesktop();
+            },
+        };
+
+        // ================================================================
+        //  ПРИЛОЖЕНИЯ
+        // ================================================================
+
+        // ---- Блокнот ----
+        class Notepad {
+            constructor(os, filepath = null) {
+                this.os = os;
+                this.filepath = filepath;
+                const content = filepath ? os.vfs.readFile(filepath) || '' : '';
+                const html = `<div class="menu-bar">
+                    <button id="np-clear">Очистить</button>
+                    <button id="np-save">Сохранить</button>
+                    <button id="np-saveas">Сохранить как...</button>
+                </div>
+                <textarea class="notepad-text">${content}</textarea>`;
+                this.winId = os.createWindow('Блокнот', html, 600, 450, '📝');
+                const win = document.getElementById(this.winId);
+                const textarea = win.querySelector('.notepad-text');
+                win.querySelector('#np-clear').onclick = () => textarea.value = '';
+                win.querySelector('#np-save').onclick = () => {
+                    const path = this.filepath || prompt('Введите путь для сохранения:', '/users/admin/Desktop/new.txt');
+                    if (path) {
+                        os.vfs.writeFile(path, textarea.value);
+                        os.vfs.appendLog('Сохранён ' + path);
+                        alert('Файл сохранён.');
+                        this.filepath = path;
+                    }
+                };
+                win.querySelector('#np-saveas').onclick = () => {
+                    const path = prompt('Введите путь для сохранения:', '/users/admin/Desktop/new.txt');
+                    if (path) {
+                        os.vfs.writeFile(path, textarea.value);
+                        os.vfs.appendLog('Сохранён ' + path);
+                        alert('Файл сохранён.');
+                        this.filepath = path;
+                    }
+                };
+            }
+        }
+
+        // ---- Проводник ----
+        class Explorer {
+            constructor(os) {
+                this.os = os;
+                this.currentPath = '/';
+                const html = `<div class="menu-bar">
+                    <button onclick="window.explorerInstance.goUp()">⬆ Наверх</button>
+                    <button onclick="window.explorerInstance.refresh()">⟳ Обновить</button>
+                    <button onclick="window.explorerInstance.newFolder()">📁 Новая папка</button>
+                </div>
+                <div style="display:flex; height:100%;">
+                    <div style="width:180px; border-right:1px solid #808080; padding:4px; overflow-y:auto;">
+                        <div onclick="window.explorerInstance.navigate('/')">/ (root)</div>
+                        <div onclick="window.explorerInstance.navigate('/users/admin/Desktop')">Рабочий стол</div>
+                        <div onclick="window.explorerInstance.navigate('/sys')">/sys</div>
+                        <div onclick="window.explorerInstance.navigate('/System32')">/System32</div>
+                        <div onclick="window.explorerInstance.navigate('/scripts')">/scripts</div>
+                    </div>
+                    <div style="flex:1; padding:4px; overflow-y:auto;" class="explorer-tree"></div>
+                </div>`;
+                this.winId = os.createWindow('Проводник', html, 700, 500, '📁');
+                window.explorerInstance = this;
+                this.navigate('/');
+            }
+            navigate(path) {
+                this.currentPath = path;
+                const tree = document.querySelector(`#${this.winId} .explorer-tree`);
+                tree.innerHTML = '';
+                const items = this.os.vfs.listDir(path);
+                items.forEach(name => {
+                    const fullPath = path === '/' ? '/' + name : path + '/' + name;
+                    const node = this.os.vfs.resolve(fullPath);
+                    const icon = node && node.type === 'dir' ? '📁' : '📄';
+                    const div = document.createElement('div');
+                    div.textContent = icon + ' ' + name;
+                    div.style.cursor = 'pointer';
+                    div.style.padding = '2px 4px';
+                    div.onclick = () => {
+                        if (node && node.type === 'dir') {
+                            this.navigate(fullPath);
+                        } else {
+                            if (name.endsWith('.rus')) {
+                                this.os.openApp('ruside', fullPath);
+                            } else {
+                                this.os.openApp('notepad', fullPath);
+                            }
+                        }
+                    };
+                    tree.appendChild(div);
+                });
+            }
+            goUp() {
+                if (this.currentPath !== '/') {
+                    const parts = this.currentPath.split('/').filter(p => p);
+                    parts.pop();
+                    const newPath = '/' + parts.join('/');
+                    this.navigate(newPath || '/');
+                }
+            }
+            refresh() {
+                this.navigate(this.currentPath);
+            }
+            newFolder() {
+                const name = 'Новая_папка_' + Math.floor(Math.random() * 100);
+                const path = this.currentPath === '/' ? '/' + name : this.currentPath + '/' + name;
+                if (this.os.vfs.mkdir(path)) {
+                    this.refresh();
+                }
+            }
+        }
+
+        // ---- Терминал ----
+        class Terminal {
+            constructor(os) {
+                this.os = os;
+                this.cwd = '/users/admin';
+                this.history = [];
+                this.historyPos = 0;
+                const html = `<div class="terminal" id="term_${Date.now()}">
+                    <div class="output"></div>
+                    <div class="input-line"><span>root@sys:${this.cwd}$ </span><input type="text" class="cmd-input" autofocus></div>
+                </div>`;
+                this.winId = os.createWindow('Терминал', html, 600, 400, '⌨');
+                const win = document.getElementById(this.winId);
+                const input = win.querySelector('.cmd-input');
+                const output = win.querySelector('.output');
+                output.textContent = 'MyGUI OS Terminal v1.0\nВведите help для справки.\n';
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        const cmd = input.value;
+                        input.value = '';
+                        output.textContent += `\nroot@sys:${this.cwd}$ ${cmd}`;
+                        this.execute(cmd, output);
+                        output.scrollTop = output.scrollHeight;
+                    }
+                });
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (this.historyPos > 0) {
+                            this.historyPos--;
+                            input.value = this.history[this.historyPos];
+                        }
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (this.historyPos < this.history.length - 1) {
+                            this.historyPos++;
+                            input.value = this.history[this.historyPos];
+                        } else {
+                            this.historyPos = this.history.length;
+                            input.value = '';
+                        }
+                    }
+                });
+                win.addEventListener('click', () => input.focus());
+            }
+
+            execute(cmd, output) {
+                const parts = cmd.trim().split(' ');
+                const command = parts[0];
+                const args = parts.slice(1);
+                if (cmd === '') return;
+                this.history.push(cmd);
+                this.historyPos = this.history.length;
+
+                const vfs = this.os.vfs;
+                let result = '';
+                switch (command) {
+                    case 'help':
+                        result = 'Доступные команды: ls, cd, pwd, cat, echo, mkdir, rm, clear, sysinfo, help';
+                        break;
+                    case 'ls':
+                    case 'dir':
+                        const items = vfs.listDir(this.cwd);
+                        result = items.join('  ');
+                        break;
+                    case 'cd':
+                        if (args.length === 0) this.cwd = '/';
+                        else {
+                            const target = args[0];
+                            const newPath = target.startsWith('/') ? target : this.cwd + '/' + target;
+                            const node = vfs.resolve(newPath);
+                            if (node && node.type === 'dir') this.cwd = newPath;
+                            else result = 'Нет такого каталога';
+                        }
+                        break;
+                    case 'pwd':
+                        result = this.cwd;
+                        break;
+                    case 'cat':
+                        if (args.length === 0) result = 'укажите файл';
+                        else {
+                            const path = args[0].startsWith('/') ? args[0] : this.cwd + '/' + args[0];
+                            const content = vfs.readFile(path);
+                            result = content || 'Файл не найден';
+                        }
+                        break;
+                    case 'echo':
+                        result = args.join(' ');
+                        break;
+                    case 'mkdir':
+                        if (args.length === 0) result = 'укажите имя';
+                        else {
+                            const path = args[0].startsWith('/') ? args[0] : this.cwd + '/' + args[0];
+                            if (vfs.mkdir(path)) result = 'Создано';
+                            else result = 'Ошибка';
+                        }
+                        break;
+                    case 'rm':
+                        if (args.length === 0) result = 'укажите имя';
+                        else {
+                            const path = args[0].startsWith('/') ? args[0] : this.cwd + '/' + args[0];
+                            if (vfs.deleteFile(path)) result = 'Удалено';
+                            else result = 'Ошибка (возможно системный файл)';
+                        }
+                        break;
+                    case 'clear':
+                    case 'cls':
+                        output.textContent = '';
+                        break;
+                    case 'sysinfo':
+                        result = `ОС: MyGUI OS v3.0\nПамять: 4096 MB\nЗагрузка ЦП: ${Math.round(Math.random()*20+10)}%`;
+                        break;
+                    default:
+                        result = `Команда не найдена: ${command}`;
+                }
+                if (result) output.textContent += '\n' + result;
+                if (command === 'cd') {
+                    const promptLine = output.parentElement.querySelector('.input-line span');
+                    promptLine.textContent = `root@sys:${this.cwd}$ `;
+                }
+                output.scrollTop = output.scrollHeight;
+            }
+        }
+
+        // ---- Paint ----
+        class Paint {
+            constructor(os) {
+                this.os = os;
+                this.color = '#000000';
+                this.size = 3;
+                this.drawing = false;
+                this.lastX = 0;
+                this.lastY = 0;
+                const html = `<div class="menu-bar">
+                    <button id="paint-clear">Очистить</button>
+                    <input type="color" id="paint-color" value="#000000">
+                    <span>Размер: </span><input type="range" id="paint-size" min="1" max="20" value="3">
+                </div>
+                <canvas class="paint-canvas"></canvas>`;
+                this.winId = os.createWindow('Paint', html, 600, 500, '🎨');
+                const win = document.getElementById(this.winId);
+                const canvas = win.querySelector('.paint-canvas');
+                const ctx = canvas.getContext('2d');
+                const resizeCanvas = () => {
+                    const rect = win.querySelector('.window-content');
+                    canvas.width = rect.clientWidth - 12;
+                    canvas.height = rect.clientHeight - 50;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                };
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+
+                const colorPicker = win.querySelector('#paint-color');
+                const sizeSlider = win.querySelector('#paint-size');
+                colorPicker.addEventListener('input', () => { this.color = colorPicker.value; });
+                sizeSlider.addEventListener('input', () => { this.size = parseInt(sizeSlider.value); });
+
+                const start = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    this.drawing = true;
+                    this.lastX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                    this.lastY = (e.clientY - rect.top) * (canvas.height / rect.height);
+                };
+                const move = (e) => {
+                    if (!this.drawing) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                    ctx.beginPath();
+                    ctx.moveTo(this.lastX, this.lastY);
+                    ctx.lineTo(x, y);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = this.size;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                    this.lastX = x;
+                    this.lastY = y;
+                };
+                const end = () => { this.drawing = false; };
+                canvas.addEventListener('mousedown', start);
+                canvas.addEventListener('mousemove', move);
+                canvas.addEventListener('mouseup', end);
+                canvas.addEventListener('mouseleave', end);
+
+                win.querySelector('#paint-clear').onclick = () => {
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                };
+                this.canvas = canvas;
+                this.ctx = ctx;
+            }
+        }
+
+        // ---- Сапёр ----
+        class Minesweeper {
+            constructor(os) {
+                this.os = os;
+                this.rows = 9;
+                this.cols = 9;
+                this.mines = 10;
+                this.board = [];
+                this.revealed = [];
+                this.flags = [];
+                this.gameOver = false;
+                this.firstClick = true;
+                const html = `<div class="minesweeper">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span id="ms-mines">${this.mines}</span>
+                        <button id="ms-new">Новая игра</button>
+                        <span id="ms-status">😊</span>
+                    </div>
+                    <div class="minesweeper-grid" style="display:grid; grid-template-columns: repeat(${this.cols}, 30px);"></div>
+                </div>`;
+                this.winId = os.createWindow('Сапёр', html, 320, 380, '💣');
+                this.grid = document.querySelector(`#${this.winId} .minesweeper-grid`);
+                this.status = document.querySelector(`#${this.winId} #ms-status`);
+                this.minesLeft = document.querySelector(`#${this.winId} #ms-mines`);
+                document.querySelector(`#${this.winId} #ms-new`).addEventListener('click', () => this.newGame());
+                this.newGame();
+            }
+
+            initGrid() {
+                this.grid.innerHTML = '';
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        const btn = document.createElement('button');
+                        btn.dataset.r = r;
+                        btn.dataset.c = c;
+                        btn.addEventListener('click', () => this.click(r, c));
+                        btn.addEventListener('contextmenu', (e) => { e.preventDefault();
+                            this.flag(r, c); });
+                        this.grid.appendChild(btn);
+                    }
+                }
+                this.board = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
+                this.revealed = Array.from({ length: this.rows }, () => Array(this.cols).fill(false));
+                this.flags = Array.from({ length: this.rows }, () => Array(this.cols).fill(false));
+                this.gameOver = false;
+                this.firstClick = true;
+                this.status.textContent = '😊';
+                this.minesLeft.textContent = this.mines;
+            }
+
+            placeMines(safeR, safeC) {
+                let placed = 0;
+                while (placed < this.mines) {
+                    const r = Math.floor(Math.random() * this.rows);
+                    const c = Math.floor(Math.random() * this.cols);
+                    if (Math.abs(r - safeR) <= 1 && Math.abs(c - safeC) <= 1) continue;
+                    if (this.board[r][c] === -1) continue;
+                    this.board[r][c] = -1;
+                    placed++;
+                }
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.board[r][c] === -1) continue;
+                        let count = 0;
+                        for (let dr = -1; dr <= 1; dr++) {
+                            for (let dc = -1; dc <= 1; dc++) {
+                                const nr = r + dr,
+                                    nc = c + dc;
+                                if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols && this.board[nr][nc] === -1)
+                                    count++;
+                            }
+                        }
+                        this.board[r][c] = count;
+                    }
+                }
+            }
+
+            click(r, c) {
+                if (this.gameOver) return;
+                if (this.flags[r][c]) return;
+                if (this.firstClick) {
+                    this.placeMines(r, c);
+                    this.firstClick = false;
+                }
+                if (this.board[r][c] === -1) {
+                    this.gameOver = true;
+                    this.revealAll();
+                    this.status.textContent = '💥';
+                    return;
+                }
+                this.reveal(r, c);
+                this.checkWin();
+            }
+
+            flag(r, c) {
+                if (this.gameOver) return;
+                if (this.revealed[r][c]) return;
+                this.flags[r][c] = !this.flags[r][c];
+                const btn = this.getBtn(r, c);
+                btn.textContent = this.flags[r][c] ? '🚩' : '';
+                this.minesLeft.textContent = this.mines - this.flags.flat().filter(v => v).length;
+            }
+
+            getBtn(r, c) {
+                return this.grid.querySelector(`button[data-r="${r}"][data-c="${c}"]`);
+            }
+
+            reveal(r, c) {
+                if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return;
+                if (this.revealed[r][c] || this.flags[r][c]) return;
+                this.revealed[r][c] = true;
+                const btn = this.getBtn(r, c);
+                btn.textContent = this.board[r][c] > 0 ? this.board[r][c] : '';
+                btn.className = 'revealed';
+                if (this.board[r][c] === 0) {
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            this.reveal(r + dr, c + dc);
+                        }
+                    }
+                }
+            }
+
+            revealAll() {
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.board[r][c] === -1) {
+                            const btn = this.getBtn(r, c);
+                            btn.textContent = '💣';
+                            btn.className = 'revealed';
+                        }
+                    }
+                }
+            }
+
+            checkWin() {
+                let allRevealed = true;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.board[r][c] !== -1 && !this.revealed[r][c]) allRevealed = false;
+                    }
+                }
+                if (allRevealed) {
+                    this.gameOver = true;
+                    this.status.textContent = '😎';
+                    alert('Вы выиграли!');
+                }
+            }
+
+            newGame() {
+                this.initGrid();
+            }
+        }
+
+        // ---- Русский код (IDE) ----
+        class RusIDE {
+            constructor(os, filepath = null) {
+                this.os = os;
+                this.filepath = filepath;
+                const content = filepath ? os.vfs.readFile(filepath) || '' : '';
+                const html = `<div class="rus-ide">
+                    <div class="menu-bar">
+                        <button id="rus-run">▶ Запустить</button>
+                        <button id="rus-save">💾 Сохранить</button>
+                        <button id="rus-saveas">💾 Сохранить как...</button>
+                        <button id="rus-clear">Очистить вывод</button>
+                    </div>
+                    <textarea class="editor" spellcheck="false">${content}</textarea>
+                    <div class="output" id="rus-output"></div>
+                </div>`;
+                this.winId = os.createWindow('Русский код', html, 700, 550, '📜');
+                const win = document.getElementById(this.winId);
+                this.editor = win.querySelector('.editor');
+                this.output = win.querySelector('#rus-output');
+
+                win.querySelector('#rus-run').addEventListener('click', () => this.run());
+                win.querySelector('#rus-save').addEventListener('click', () => this.save());
+                win.querySelector('#rus-saveas').addEventListener('click', () => this.saveAs());
+                win.querySelector('#rus-clear').addEventListener('click', () => { this.output.textContent = ''; });
+            }
+
+            run() {
+                const code = this.editor.value;
+                this.output.textContent = '=== ВЫПОЛНЕНИЕ ===\n';
+                const interp = new RussianInterpreter(this.os.vfs);
+                interp.run(code, (text) => {
+                    this.output.textContent += text + '\n';
+                    this.output.scrollTop = this.output.scrollHeight;
+                });
+            }
+
+            save() {
+                if (this.filepath) {
+                    this.os.vfs.writeFile(this.filepath, this.editor.value);
+                    this.os.vfs.appendLog('Сохранён ' + this.filepath);
+                    alert('Сохранено!');
+                } else {
+                    this.saveAs();
+                }
+            }
+
+            saveAs() {
+                const path = prompt('Введите путь для сохранения:', '/users/admin/Desktop/программа.rus');
+                if (path) {
+                    this.filepath = path;
+                    this.os.vfs.writeFile(path, this.editor.value);
+                    this.os.vfs.appendLog('Сохранён ' + path);
+                    alert('Сохранено!');
+                }
+            }
+        }
+
+        // ---- Консоль ----
+        class Console {
+            constructor(os) {
+                this.os = os;
+                const html = `<div class="terminal" style="height:100%;">
+                    <div class="output" style="height:calc(100% - 30px); overflow-y:auto; white-space:pre-wrap;"></div>
+                    <div class="input-line"><span># </span><input type="text" class="cmd-input" autofocus></div>
+                </div>`;
+                this.winId = os.createWindow('Консоль', html, 700, 450, '⌨️');
+                const win = document.getElementById(this.winId);
+                const input = win.querySelector('.cmd-input');
+                const output = win.querySelector('.output');
+                output.textContent = 'Консоль MyGUI OS v1.0\nВведите команду.\n';
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        const cmd = input.value;
+                        input.value = '';
+                        output.textContent += `\n# ${cmd}`;
+                        const parts = cmd.split(' ');
+                        const command = parts[0];
+                        const args = parts.slice(1);
+                        let result = '';
+                        const vfs = this.os.vfs;
+                        switch (command) {
+                            case 'help':
+                                result = 'Доступны: ls, cd, pwd, cat, echo, mkdir, rm, sysinfo, help';
+                                break;
+                            case 'ls':
+                                result = vfs.listDir('/users/admin/Desktop').join('  ');
+                                break;
+                            case 'pwd':
+                                result = '/users/admin/Desktop';
+                                break;
+                            case 'echo':
+                                result = args.join(' ');
+                                break;
+                            case 'sysinfo':
+                                result = 'MyGUI OS 3.0\nПамять: 4096 MB';
+                                break;
+                            default:
+                                result = `Команда не найдена: ${command}`;
+                        }
+                        output.textContent += '\n' + result;
+                        output.scrollTop = output.scrollHeight;
+                    }
+                });
+            }
+        }
+
+        // ---- Вирус ----
+        class Virus {
+            constructor(os) {
+                this.os = os;
+                const html = `<div style="padding:10px; font-family:monospace;">
+                    <h2>💀 ВИРУС-УБИЙЦА</h2>
+                    <p>Этот вирус удаляет системные файлы!</p>
+                    <button id="virus-delete-all">Удалить ВСЕ системные файлы</button>
+                    <button id="virus-delete-kernel">Удалить ядро (kernel.bin)</button>
+                    <button id="virus-check">Проверить систему</button>
+                    <pre id="virus-output" style="background:black; color:#0f0; padding:8px; margin-top:8px; height:200px; overflow-y:auto;">Готов к действию.</pre>
+                </div>`;
+                this.winId = os.createWindow('💀 Вирус', html, 500, 400, '💀');
+                this.output = document.querySelector(`#${this.winId} #virus-output`);
+                this.vfs = os.vfs;
+                this.log('💀 Вирус активирован!');
+                document.querySelector(`#${this.winId} #virus-delete-all`).addEventListener('click', () => this.deleteAll());
+                document.querySelector(`#${this.winId} #virus-delete-kernel`).addEventListener('click', () => this
+                .deleteKernel());
+                document.querySelector(`#${this.winId} #virus-check`).addEventListener('click', () => this.checkSystem());
+            }
+
+            log(msg) {
+                this.output.textContent += '\n' + msg;
+                this.output.scrollTop = this.output.scrollHeight;
+            }
+
+            deleteAll() {
+                if (!confirm('Удалить ВСЕ системные файлы? Система уничтожится!')) return;
+                const critical = ['/sys/kernel.bin', '/sys/config.ini', '/sys/boot.ini',
+                    '/System32/ntoskrnl.exe', '/System32/services.exe', '/System32/hal.dll'
+                ];
+                let count = 0;
+                for (const p of critical) {
+                    if (this.vfs.deleteFile(p)) {
+                        this.log('🗑️ Удалён: ' + p);
+                        count++;
+                    } else {
+                        this.log('❌ Не удалён: ' + p);
+                    }
+                }
+                this.log(`Удалено файлов: ${count}`);
+                if (count > 0) {
+                    this.log('💀 СИСТЕМА УНИЧТОЖЕНА!');
+                    const missing = this.vfs.checkIntegrity();
+                    if (missing.length > 0) {
+                        this.os.showBSOD('Система уничтожена вирусом!', missing);
+                    }
+                }
+            }
+
+            deleteKernel() {
+                if (this.vfs.deleteFile('/sys/kernel.bin')) {
+                    this.log('🗑️ Ядро удалено!');
+                    const missing = this.vfs.checkIntegrity();
+                    if (missing.length > 0) {
+                        this.os.showBSOD('Ядро удалено! Система не загрузится.', missing);
+                    }
+                } else {
+                    this.log('❌ Не удалось удалить ядро.');
+                }
+            }
+
+            checkSystem() {
+                const critical = ['/sys/kernel.bin', '/sys/config.ini', '/sys/boot.ini', '/System32/ntoskrnl.exe'];
+                let ok = 0;
+                for (const p of critical) {
+                    if (this.vfs.resolve(p)) { this.log('✅ ' + p);
+                        ok++; } else this.log('❌ ' + p);
+                }
+                this.log(`Целостность: ${ok}/${critical.length}`);
+            }
+        }
+
+        // ================================================================
+        //  ЗАПУСК
+        // ================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            OS.boot();
+        });
+    </script>
+</body>
+</html>
